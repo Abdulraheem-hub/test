@@ -91,6 +91,10 @@ class EditorWidget(QPlainTextEdit):
         self.setFont(QFont("Consolas", 11))
         self.setTabStopDistance(40)
 
+        # Segment-related attributes - initialize before connecting signals
+        self._editor_core: EditorCore | None = None
+        self._segment_highlights: list[QTextEdit.ExtraSelection] = []
+
         # Create line number area
         self.line_number_area = LineNumberArea(self)
 
@@ -102,10 +106,6 @@ class EditorWidget(QPlainTextEdit):
         # Initialize
         self.update_line_number_area_width(0)
         self.highlight_current_line()
-
-        # Segment-related attributes
-        self._editor_core: EditorCore | None = None
-        self._segment_highlights: list[QTextEdit.ExtraSelection] = []
 
     def set_editor_core(self, editor_core: EditorCore) -> None:
         """Set the editor core for segment awareness."""
