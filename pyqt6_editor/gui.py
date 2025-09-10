@@ -103,6 +103,15 @@ class EditorWidget(QPlainTextEdit):
         self.update_line_number_area_width(0)
         self.highlight_current_line()
 
+        # Segment-related attributes
+        self._editor_core: EditorCore | None = None
+        self._segment_highlights: list[QTextEdit.ExtraSelection] = []
+
+    def set_editor_core(self, editor_core: EditorCore) -> None:
+        """Set the editor core for segment awareness."""
+        self._editor_core = editor_core
+        self._update_segment_highlights()
+
     def line_number_area_width(self) -> int:
         """Calculate the width needed for line number area."""
         digits = len(str(max(1, self.blockCount())))
@@ -152,9 +161,10 @@ class EditorWidget(QPlainTextEdit):
             block_number += 1
 
     def highlight_current_line(self) -> None:
-        """Highlight the current line."""
+        """Highlight the current line and apply segment highlighting."""
         extra_selections = []
 
+        # Current line highlighting
         if not self.isReadOnly():
             selection = QTextEdit.ExtraSelection()
             line_color = QColor(Qt.GlobalColor.yellow).lighter(160)
@@ -164,7 +174,62 @@ class EditorWidget(QPlainTextEdit):
             selection.cursor.clearSelection()
             extra_selections.append(selection)
 
+        # Add segment highlights
+        extra_selections.extend(self._segment_highlights)
+
         self.setExtraSelections(extra_selections)
+
+    def _update_segment_highlights(self) -> None:
+        """Update segment highlighting based on current segments."""
+        self._segment_highlights.clear()
+
+        if not self._editor_core:
+            return
+
+        segments_info = self._editor_core.get_segments_info()
+
+        for segment_info in segments_info:
+            if segment_info["is_locked"]:
+                # Create highlight for locked segment
+                selection = QTextEdit.ExtraSelection()
+
+                # Light gray background for locked segments
+                locked_color = QColor(220, 220, 220)
+                selection.format.setBackground(locked_color)
+
+                # Create cursor for the segment range
+                cursor = QTextCursor(self.document())
+                cursor.setPosition(segment_info["start_pos"])
+                cursor.setPosition(segment_info["end_pos"], QTextCursor.MoveMode.KeepAnchor)
+                selection.cursor = cursor
+
+                self._segment_highlights.append(selection)
+
+        # Refresh highlights
+        self.highlight_current_line()
+
+    def _is_position_in_locked_segment(self, position: int) -> bool:
+        """Check if position is in a locked segment."""
+        if not self._editor_core:
+            return False
+        return not self._editor_core.can_edit_at_position(position)
+
+    def _is_deletion_in_locked_segment(self, key: Qt.Key, cursor: QTextCursor) -> bool:
+        """Check if deletion would affect a locked segment."""
+        if not self._editor_core:
+            return False
+
+        current_pos = cursor.position()
+
+        if key == Qt.Key.Key_Backspace:
+            # Backspace deletes the character before cursor
+            if current_pos > 0:
+                return self._is_position_in_locked_segment(current_pos - 1)
+        elif key == Qt.Key.Key_Delete:
+            # Delete deletes the character at cursor
+            return self._is_position_in_locked_segment(current_pos)
+
+        return False
 
     def keyPressEvent(self, event) -> None:
         """Handle key press events with overwrite mode and constraints."""
@@ -190,13 +255,19 @@ class EditorWidget(QPlainTextEdit):
 
         # Handle Backspace and Delete
         if key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
-            # For now, allow normal backspace/delete behavior
-            # TODO: Add locked segment protection when needed
+            # Check if we're trying to delete from a locked segment
+            if self._is_deletion_in_locked_segment(key, cursor):
+                # Block the deletion
+                return
             super().keyPressEvent(event)
             return
 
         # Handle text input (overwrite mode with constraints)
         if text and text.isprintable():
+            # Check if typing at current position is allowed
+            if self._is_position_in_locked_segment(cursor.position()):
+                # Block typing in locked segments
+                return
             self._handle_text_input(text, cursor)
             return
 
@@ -229,6 +300,7 @@ class EditorWidget(QPlainTextEdit):
     def set_content(self, content: str) -> None:
         """Set editor content."""
         self.setPlainText(content)
+        self._update_segment_highlights()
 
     def get_content(self) -> str:
         """Get editor content."""
@@ -295,6 +367,9 @@ class MainWindow(QMainWindow):
         # Create editor widgets
         self.styled_editor = EditorWidget()
         self.source_editor = SourceView()
+
+        # Connect styled editor to the core for segment functionality
+        self.styled_editor.set_editor_core(self.editor_core)
 
         # Add both to splitter but hide one initially
         self.splitter.addWidget(self.styled_editor)
@@ -419,6 +494,11 @@ class MainWindow(QMainWindow):
 
         # Update document manager
         self.editor_core.document_manager.content = content
+
+        # Update segment highlights if in styled view
+        if (self.editor_core.current_mode == ViewMode.STYLED and
+            isinstance(current_editor, EditorWidget)):
+            current_editor._update_segment_highlights()
 
         # Update window title to show modified status
         self._update_window_title()
