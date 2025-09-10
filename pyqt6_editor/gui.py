@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QSplitter,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -160,7 +161,7 @@ class EditorWidget(QPlainTextEdit):
         extra_selections = []
 
         if not self.isReadOnly():
-            selection = QPlainTextEdit.ExtraSelection()
+            selection = QTextEdit.ExtraSelection()
             line_color = QColor(Qt.GlobalColor.yellow).lighter(160)
             selection.format.setBackground(line_color)
             selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)
@@ -214,12 +215,7 @@ class EditorWidget(QPlainTextEdit):
         line_text = current_block.text()
         cursor_position_in_line = cursor.positionInBlock()
 
-        # Check if we're at the end of the line beyond existing text
-        if cursor_position_in_line >= len(line_text):
-            # Block typing beyond existing text at end of line
-            return
-
-        # Check line length constraint
+        # Check line length constraint first
         if len(line_text) >= self.MAX_LINE_LENGTH and cursor_position_in_line >= self.MAX_LINE_LENGTH:
             # Block typing beyond 80 characters
             return
@@ -230,9 +226,10 @@ class EditorWidget(QPlainTextEdit):
             cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor)
             cursor.insertText(text)
         else:
-            # We're at the end of existing text but within line length limit
+            # We're at the end of existing text - allow typing if within line limit
             if len(line_text) < self.MAX_LINE_LENGTH:
                 cursor.insertText(text)
+            # If we're exactly at the end of an 80-character line, block further typing
 
     def set_content(self, content: str) -> None:
         """Set editor content."""
