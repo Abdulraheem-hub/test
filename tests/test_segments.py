@@ -198,12 +198,23 @@ class TestDocumentManagerSegments:
         result = dm.evaluate_dynamic_segment(segment)
         assert result == "Normal text"
 
-        # Dynamic segment
+        # Dynamic segment with unknown function
         dynamic_func = DynamicFunction(function="test_func", deps=[])
         metadata = SegmentMetadata(id="dynamic", dynamic=dynamic_func)
         segment = TextSegment(content="Original", metadata=metadata)
         result = dm.evaluate_dynamic_segment(segment)
-        assert result == "[DYNAMIC: test_func]"
+        assert result == "[ERROR: Unknown function - test_func]"
+
+        # Dynamic segment with registered function
+        def test_registered_func():
+            return "computed_result"
+
+        dm.register_dynamic_function("test_registered", test_registered_func)
+        dynamic_func = DynamicFunction(function="test_registered", deps=[])
+        metadata = SegmentMetadata(id="dynamic_registered", dynamic=dynamic_func)
+        segment = TextSegment(content="Original", metadata=metadata)
+        result = dm.evaluate_dynamic_segment(segment)
+        assert result == "computed_result"
 
     def test_update_segment_content(self) -> None:
         """Test updating segment content."""
@@ -231,6 +242,171 @@ class TestDocumentManagerSegments:
         # Try to update locked segment should fail
         success = dm.update_segment_content("locked_segment", "New content")
         assert success is False
+
+    def test_builtin_difference_function(self) -> None:
+        """Test the built-in difference function."""
+        dm = DocumentManager()
+
+        # Create test content with segments containing numbers
+        content = '''<!-- SEGMENT: id="num1" -->
+<value>10</value>
+<!-- SEGMENT: id="num2" -->
+<value>3</value>
+<!-- SEGMENT: id="result", dynamic="difference:num1,num2" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content
+
+        # Find the dynamic segment
+        result_segment = None
+        for segment in dm.segments:
+            if segment.metadata.id == "result":
+                result_segment = segment
+                break
+
+        assert result_segment is not None
+        assert result_segment.metadata.is_dynamic
+
+        # Test the difference calculation
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert result == "7.0"  # 10 - 3 = 7
+
+    def test_builtin_difference_function_negative_result(self) -> None:
+        """Test the difference function with negative result."""
+        dm = DocumentManager()
+
+        # Create test content with segments containing numbers
+        content = '''<!-- SEGMENT: id="small" -->
+<value>3</value>
+<!-- SEGMENT: id="large" -->
+<value>10</value>
+<!-- SEGMENT: id="result", dynamic="difference:small,large" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content
+
+        # Find the dynamic segment
+        result_segment = None
+        for segment in dm.segments:
+            if segment.metadata.id == "result":
+                result_segment = segment
+                break
+
+        assert result_segment is not None
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert result == "-7.0"  # 3 - 10 = -7
+
+    def test_builtin_difference_function_errors(self) -> None:
+        """Test the difference function error cases."""
+        dm = DocumentManager()
+
+        # Test with non-existent segment
+        content = '''<!-- SEGMENT: id="existing" -->
+<value>5</value>
+<!-- SEGMENT: id="result", dynamic="difference:existing,nonexistent" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content
+        result_segment = dm._find_segment_by_id("result")
+        assert result_segment is not None
+
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert "ERROR: Segment not found" in result
+
+        # Test with non-numeric content
+        content2 = '''<!-- SEGMENT: id="text_segment" -->
+<value>not a number</value>
+<!-- SEGMENT: id="num_segment" -->
+<value>5</value>
+<!-- SEGMENT: id="result", dynamic="difference:text_segment,num_segment" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content2
+        result_segment = dm._find_segment_by_id("result")
+        assert result_segment is not None
+
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert "ERROR: Non-numeric content" in result
+
+    def test_builtin_digits_to_words_function(self) -> None:
+        """Test the built-in digits_to_words function."""
+        dm = DocumentManager()
+
+        # Test with positive number
+        content = '''<!-- SEGMENT: id="number" -->
+<value>123</value>
+<!-- SEGMENT: id="result", dynamic="digits_to_words:number" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content
+
+        result_segment = dm._find_segment_by_id("result")
+        assert result_segment is not None
+
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert result == "one two three"
+
+    def test_builtin_digits_to_words_function_negative(self) -> None:
+        """Test the digits_to_words function with negative number."""
+        dm = DocumentManager()
+
+        content = '''<!-- SEGMENT: id="number" -->
+<value>-456</value>
+<!-- SEGMENT: id="result", dynamic="digits_to_words:number" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content
+
+        result_segment = dm._find_segment_by_id("result")
+        assert result_segment is not None
+
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert result == "negative four five six"
+
+    def test_builtin_digits_to_words_function_single_digit(self) -> None:
+        """Test the digits_to_words function with single digit."""
+        dm = DocumentManager()
+
+        content = '''<!-- SEGMENT: id="number" -->
+<value>0</value>
+<!-- SEGMENT: id="result", dynamic="digits_to_words:number" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content
+
+        result_segment = dm._find_segment_by_id("result")
+        assert result_segment is not None
+
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert result == "zero"
+
+    def test_builtin_digits_to_words_function_errors(self) -> None:
+        """Test the digits_to_words function error cases."""
+        dm = DocumentManager()
+
+        # Test with non-existent segment
+        content = '''<!-- SEGMENT: id="result", dynamic="digits_to_words:nonexistent" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content
+        result_segment = dm._find_segment_by_id("result")
+        assert result_segment is not None
+
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert "ERROR: Segment not found" in result
+
+        # Test with non-numeric content
+        content2 = '''<!-- SEGMENT: id="text_segment" -->
+<value>hello world</value>
+<!-- SEGMENT: id="result", dynamic="digits_to_words:text_segment" -->
+<result>{{computed}}</result>'''
+
+        dm.content = content2
+        result_segment = dm._find_segment_by_id("result")
+        assert result_segment is not None
+
+        result = dm.evaluate_dynamic_segment(result_segment)
+        assert "ERROR: Non-numeric content" in result
 
 
 class TestEditorCoreSegments:

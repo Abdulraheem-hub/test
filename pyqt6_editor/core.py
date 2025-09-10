@@ -69,6 +69,8 @@ class DocumentManager:
         self._modified: bool = False
         self._segments: list[TextSegment] = []
         self._dynamic_functions: dict[str, Callable] = {}
+        # Register built-in formula functions
+        self._register_builtin_functions()
 
     @property
     def content(self) -> str:
@@ -372,14 +374,119 @@ class DocumentManager:
         """Register a dynamic function for use in segments."""
         self._dynamic_functions[name] = func
 
+    def _register_builtin_functions(self) -> None:
+        """Register built-in formula functions."""
+        self.register_dynamic_function("difference", self._difference_func)
+        self.register_dynamic_function("digits_to_words", self._digits_to_words_func)
+
+    def _difference_func(self, id1: str, id2: str) -> str:
+        """Calculate numeric difference between two segments."""
+        # Find segments by ID
+        segment1 = self._find_segment_by_id(id1)
+        segment2 = self._find_segment_by_id(id2)
+
+        if not segment1 or not segment2:
+            return f"[ERROR: Segment not found - {id1 if not segment1 else id2}]"
+
+        try:
+            # Extract numeric value from segment content
+            value1 = self._extract_numeric_value(segment1.content)
+            value2 = self._extract_numeric_value(segment2.content)
+
+            if value1 is None or value2 is None:
+                return "[ERROR: Non-numeric content]"
+
+            difference = value1 - value2
+            return str(difference)
+        except Exception as e:
+            return f"[ERROR: {str(e)}]"
+
+    def _digits_to_words_func(self, segment_id: str) -> str:
+        """Convert each digit of a number to its word representation."""
+        # Find segment by ID
+        segment = self._find_segment_by_id(segment_id)
+
+        if not segment:
+            return f"[ERROR: Segment not found - {segment_id}]"
+
+        try:
+            # Extract numeric value from segment content
+            numeric_value = self._extract_numeric_value(segment.content)
+
+            if numeric_value is None:
+                return "[ERROR: Non-numeric content]"
+
+            # Convert to string and process each digit
+            digit_names = {
+                '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
+                '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
+            }
+
+            # Handle negative numbers
+            if numeric_value < 0:
+                digit_str = str(abs(int(numeric_value)))
+                words = ['negative'] + [digit_names[digit] for digit in digit_str]
+            else:
+                digit_str = str(int(numeric_value))
+                words = [digit_names[digit] for digit in digit_str]
+
+            return ' '.join(words)
+        except Exception as e:
+            return f"[ERROR: {str(e)}]"
+
+    def _find_segment_by_id(self, segment_id: str) -> TextSegment | None:
+        """Find a segment by its ID."""
+        for segment in self._segments:
+            if segment.metadata.id == segment_id:
+                return segment
+        return None
+
+    def _extract_numeric_value(self, content: str) -> float | None:
+        """Extract numeric value from content string."""
+        import re
+
+        # Remove XML tags and whitespace
+        clean_content = re.sub(r'<[^>]+>', '', content).strip()
+
+        # Try to parse as number
+        try:
+            # Handle negative numbers and decimals
+            if re.match(r'^-?\d+\.?\d*$', clean_content):
+                return float(clean_content)
+            else:
+                # Look for the first number in the string
+                match = re.search(r'-?\d+\.?\d*', clean_content)
+                if match:
+                    return float(match.group())
+                return None
+        except ValueError:
+            return None
+
     def evaluate_dynamic_segment(self, segment: TextSegment) -> str:
         """Evaluate a dynamic segment and return its computed content."""
         if not segment.metadata.is_dynamic or not segment.metadata.dynamic:
             return segment.content
 
-        # For now, return the original content
-        # This would be enhanced to actually evaluate the function
-        return f"[DYNAMIC: {segment.metadata.dynamic.function}]"
+        function_name = segment.metadata.dynamic.function
+        dependencies = segment.metadata.dynamic.deps
+
+        # Check if function is registered
+        if function_name not in self._dynamic_functions:
+            return f"[ERROR: Unknown function - {function_name}]"
+
+        try:
+            # Get the function
+            func = self._dynamic_functions[function_name]
+
+            # Call function with dependencies as arguments
+            if dependencies:
+                result = func(*dependencies)
+            else:
+                result = func()
+
+            return str(result)
+        except Exception as e:
+            return f"[ERROR: {str(e)}]"
 
     def update_segment_content(self, segment_id: str, new_content: str) -> bool:
         """Update content of a segment if it's not locked."""
