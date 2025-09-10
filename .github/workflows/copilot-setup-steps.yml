@@ -11,41 +11,37 @@ jobs:
   copilot-setup-validation:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      QT_QPA_PLATFORM: offscreen
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
         
     - name: Install uv package manager
       run: pip install uv
       
-    - name: Install dependencies
+    - name: Install dependencies with dev tools
       run: |
-        # Install all dependencies - Takes 1-2 minutes as per copilot instructions
-        uv sync
+        # Install all dependencies including dev tools - Takes 1-2 minutes as per copilot instructions
+        uv sync --dev
       timeout-minutes: 5
-      
-    - name: Install development dependencies
-      run: |
-        # Install development dependencies for linting and type checking
-        uv add --dev ruff mypy pytest-cov
-      timeout-minutes: 2
       
     - name: Run core logic tests
       run: |
         # Run only core logic tests (29 tests, ~0.3 seconds, no GUI required)
-        uv run pytest tests/test_core.py
+        uv run pytest tests/test_core.py -v
       timeout-minutes: 1
       
     - name: Run all tests
       run: |
         # Run all tests (33 tests, ~0.6 seconds)
-        uv run pytest
+        uv run pytest -v
       timeout-minutes: 1
       
     - name: Run tests with coverage
@@ -73,10 +69,10 @@ jobs:
       timeout-minutes: 1
       continue-on-error: true  # Known type errors in GUI components
       
-    - name: Validate core functionality
+    - name: Create core functionality test script
       run: |
-        # Test core functionality validation scenarios
-        uv run python -c "
+        # Create validation script to avoid escaping issues
+        cat > /tmp/validate_core.py << 'EOF'
         from pyqt6_editor.core import DocumentManager, EditorCore, ViewMode
         
         # Test 1: Basic XML editing workflow
@@ -99,7 +95,12 @@ jobs:
         assert 'Invalid XML' in error, f'Expected Invalid XML error, got: {error}'
         
         print('✅ All core functionality validation scenarios passed')
-        "
+        EOF
+      
+    - name: Validate core functionality
+      run: |
+        # Test core functionality validation scenarios
+        uv run python /tmp/validate_core.py
       timeout-minutes: 1
       
     - name: Generate coverage report
@@ -109,7 +110,7 @@ jobs:
       timeout-minutes: 1
       
     - name: Upload coverage report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-report
         path: htmlcov/
