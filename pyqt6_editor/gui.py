@@ -577,6 +577,10 @@ class MainWindow(QMainWindow):
 
     def _switch_view_mode(self, mode: ViewMode) -> None:
         """Switch between view modes."""
+        # First, save current editor content to document manager
+        current_editor = self._get_current_editor()
+        self.editor_core.document_manager.content = current_editor.get_content()
+
         # Validate XML if switching to styled view
         if mode == ViewMode.STYLED:
             can_switch, error = self.editor_core.can_switch_to_styled()
@@ -599,8 +603,8 @@ class MainWindow(QMainWindow):
 
     def _update_view_mode(self) -> None:
         """Update UI based on current view mode."""
-        current_editor = self._get_current_editor()
-        content = current_editor.get_content()
+        # Get the appropriate content for the target view mode from EditorCore
+        content = self.editor_core.get_display_content()
 
         if self.editor_core.current_mode == ViewMode.STYLED:
             # Switch to styled view
