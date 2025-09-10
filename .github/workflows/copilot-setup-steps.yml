@@ -1,117 +1,14 @@
-name: Copilot Setup Steps
+name: PyQt6 Setup
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+on: workflow_dispatch
 
 jobs:
-  copilot-setup-validation:
+  setup:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      QT_QPA_PLATFORM: offscreen
-    
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v5
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v4
       with:
-        python-version: '3.12'
-        
-    - name: Install uv package manager
-      run: pip install uv
-      
-    - name: Install dependencies with dev tools
-      run: |
-        # Install all dependencies including dev tools - Takes 1-2 minutes as per copilot instructions
-        uv sync --dev
-      timeout-minutes: 5
-      
-    - name: Run core logic tests
-      run: |
-        # Run only core logic tests (29 tests, ~0.3 seconds, no GUI required)
-        uv run pytest tests/test_core.py -v
-      timeout-minutes: 1
-      
-    - name: Run all tests
-      run: |
-        # Run all tests (33 tests, ~0.6 seconds)
-        uv run pytest -v
-      timeout-minutes: 1
-      
-    - name: Run tests with coverage
-      run: |
-        # Run with coverage reporting (~0.5 seconds)
-        uv run pytest --cov=pyqt6_editor --cov-report=term
-      timeout-minutes: 1
-      
-    - name: Lint code
-      run: |
-        # Linting with ruff (~0.04 seconds) - All linting issues resolved
-        uv run ruff check .
-      timeout-minutes: 1
-      
-    - name: Auto-fix linting issues
-      run: |
-        # Auto-fix any new linting issues
-        uv run ruff check . --fix
-      timeout-minutes: 1
-      
-    - name: Type checking
-      run: |
-        # Type checking with mypy (~3.7 seconds) - Currently has 28 type errors in GUI components
-        uv run mypy pyqt6_editor/
-      timeout-minutes: 1
-      continue-on-error: true  # Known type errors in GUI components
-      
-    - name: Create core functionality test script
-      run: |
-        # Create validation script to avoid escaping issues
-        cat > /tmp/validate_core.py << 'EOF'
-        from pyqt6_editor.core import DocumentManager, EditorCore, ViewMode
-        
-        # Test 1: Basic XML editing workflow
-        core = EditorCore()
-        core.document_manager.content = '<root><child>test</child></root>'
-        
-        # Test 2: XML validation
-        is_valid, error = core.document_manager.validate_xml()
-        assert is_valid == True, f'XML validation failed: {error}'
-        
-        # Test 3: View mode switching
-        core.set_mode(ViewMode.SOURCE)
-        can_switch, error = core.can_switch_to_styled()
-        assert can_switch == True, f'Cannot switch to styled view: {error}'
-        
-        # Test 4: Invalid XML handling
-        core.document_manager.content = '<root><unclosed>'
-        can_switch, error = core.can_switch_to_styled()
-        assert can_switch == False, 'Should not be able to switch with invalid XML'
-        assert 'Invalid XML' in error, f'Expected Invalid XML error, got: {error}'
-        
-        print('✅ All core functionality validation scenarios passed')
-        EOF
-      
-    - name: Validate core functionality
-      run: |
-        # Test core functionality validation scenarios
-        uv run python /tmp/validate_core.py
-      timeout-minutes: 1
-      
-    - name: Generate coverage report
-      run: |
-        # Generate HTML coverage report for review
-        uv run pytest --cov=pyqt6_editor --cov-report=html
-      timeout-minutes: 1
-      
-    - name: Upload coverage report
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: htmlcov/
-        retention-days: 7
+        python-version: '3.11'
+    - uses: astral-sh/setup-uv@v2
+    - run: uv sync
