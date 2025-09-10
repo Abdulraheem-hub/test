@@ -94,32 +94,27 @@ class EditorWidget(QPlainTextEdit):
         # Create line number area
         self.line_number_area = LineNumberArea(self)
 
-        # Connect signals for line number updates
+        # Connect signals
         self.blockCountChanged.connect(self.update_line_number_area_width)
         self.updateRequest.connect(self.update_line_number_area)
         self.cursorPositionChanged.connect(self.highlight_current_line)
 
-        # Initialize line number area
+        # Initialize
         self.update_line_number_area_width(0)
         self.highlight_current_line()
 
     def line_number_area_width(self) -> int:
-        """Calculate the width needed for line numbers."""
-        digits = 1
-        max_num = max(1, self.blockCount())
-        while max_num >= 10:
-            max_num //= 10
-            digits += 1
-
+        """Calculate the width needed for line number area."""
+        digits = len(str(max(1, self.blockCount())))
         space = 3 + self.fontMetrics().horizontalAdvance('9') * digits
         return space
 
-    def update_line_number_area_width(self, _) -> None:
+    def update_line_number_area_width(self, _: int) -> None:
         """Update the width of the line number area."""
         self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
 
-    def update_line_number_area(self, rect, dy) -> None:
-        """Update the line number area when scrolling."""
+    def update_line_number_area(self, rect: QRect, dy: int) -> None:
+        """Update the line number area when the editor is scrolled."""
         if dy:
             self.line_number_area.scroll(0, dy)
         else:
@@ -129,13 +124,13 @@ class EditorWidget(QPlainTextEdit):
             self.update_line_number_area_width(0)
 
     def resizeEvent(self, event) -> None:
-        """Handle resize events to update line number area."""
+        """Handle resize events."""
         super().resizeEvent(event)
         cr = self.contentsRect()
         self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
 
     def line_number_area_paint_event(self, event) -> None:
-        """Paint the line numbers."""
+        """Paint line numbers."""
         painter = QPainter(self.line_number_area)
         painter.fillRect(event.rect(), QColor(240, 240, 240))
 
@@ -172,7 +167,7 @@ class EditorWidget(QPlainTextEdit):
         self.setExtraSelections(extra_selections)
 
     def keyPressEvent(self, event) -> None:
-        """Handle key press events for overwrite mode and line length constraints."""
+        """Handle key press events with overwrite mode and constraints."""
         key = event.key()
         text = event.text()
         cursor = self.textCursor()
