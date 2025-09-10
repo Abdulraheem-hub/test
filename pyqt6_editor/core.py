@@ -108,29 +108,107 @@ class DocumentManager:
         self._modified = False
 
     def load_from_file(self, file_path: str) -> None:
-        """Load content from file."""
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                self._content = f.read()
-            self._file_path = file_path
-            self._modified = False
-            self._parse_segments()
-        except (OSError, UnicodeDecodeError) as e:
-            raise FileLoadError(f"Failed to load file {file_path}: {e}") from e
+        """Load content from file, auto-detecting .xedit format."""
+        if file_path.lower().endswith('.xedit'):
+            self.load_from_xedit_file(file_path)
+        else:
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    self._content = f.read()
+                self._file_path = file_path
+                self._modified = False
+                self._parse_segments()
+            except (OSError, UnicodeDecodeError) as e:
+                raise FileLoadError(f"Failed to load file {file_path}: {e}") from e
 
     def save_to_file(self, file_path: str | None = None) -> None:
-        """Save content to file."""
+        """Save content to file, auto-detecting .xedit format."""
         target_path = file_path or self._file_path
         if not target_path:
             raise FileSaveError("No file path specified")
 
+        if target_path.lower().endswith('.xedit'):
+            self.save_to_xedit_file(target_path)
+        else:
+            try:
+                with open(target_path, "w", encoding="utf-8") as f:
+                    f.write(self._content)
+                self._file_path = target_path
+                self._modified = False
+            except OSError as e:
+                raise FileSaveError(f"Failed to save file {target_path}: {e}") from e
+
+    def save_to_xedit_file(self, file_path: str) -> None:
+        """Save content to .xedit XML format with segment metadata."""
         try:
-            with open(target_path, "w", encoding="utf-8") as f:
-                f.write(self._content)
-            self._file_path = target_path
+            # Create xedit XML structure
+            xedit_root = ET.Element("xedit")
+            xedit_root.set("version", "1.0")
+
+            # Add metadata section
+            ET.SubElement(xedit_root, "metadata")
+
+            # Add document section with original content
+            document_elem = ET.SubElement(xedit_root, "document")
+            # Use CDATA to preserve content exactly
+            document_elem.text = self._content
+
+            # Format and write XML
+            ET.indent(xedit_root, space="  ", level=0)
+            xml_content = ET.tostring(xedit_root, encoding="unicode", xml_declaration=True)
+
+            # Manual CDATA wrapping since ElementTree doesn't support CDATA directly
+            # Replace the content between document tags with CDATA
+            if self._content:
+                import re
+                # Find the document element content and wrap in CDATA
+                escaped_content = self._content.replace("]]>", "]]]]><![CDATA[>")
+                cdata_content = f"<![CDATA[{escaped_content}]]>"
+                xml_content = re.sub(
+                    r'<document>(.*?)</document>',
+                    f'<document>{cdata_content}</document>',
+                    xml_content,
+                    flags=re.DOTALL
+                )
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(xml_content)
+
+            self._file_path = file_path
             self._modified = False
-        except OSError as e:
-            raise FileSaveError(f"Failed to save file {target_path}: {e}") from e
+
+        except (OSError, ET.ParseError) as e:
+            raise FileSaveError(f"Failed to save .xedit file {file_path}: {e}") from e
+
+    def load_from_xedit_file(self, file_path: str) -> None:
+        """Load content from .xedit XML format."""
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                xml_content = f.read()
+
+            # Parse XML
+            root = ET.fromstring(xml_content)
+
+            # Validate root element
+            if root.tag != "xedit":
+                raise FileLoadError(f"Invalid .xedit file: root element must be 'xedit', got '{root.tag}'")
+
+            # Extract document content
+            document_elem = root.find("document")
+            if document_elem is None:
+                raise FileLoadError("Invalid .xedit file: missing 'document' element")
+
+            # Get the content from document element
+            # ElementTree automatically handles CDATA sections and returns the text content
+            document_content = document_elem.text or ""
+
+            self._content = document_content
+            self._file_path = file_path
+            self._modified = False
+            self._parse_segments()
+
+        except (OSError, UnicodeDecodeError, ET.ParseError) as e:
+            raise FileLoadError(f"Failed to load .xedit file {file_path}: {e}") from e
 
     def format_xml(self) -> str:
         """Format XML content with proper indentation."""

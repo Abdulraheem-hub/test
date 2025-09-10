@@ -419,3 +419,213 @@ class TestViewMode:
         # Test enum comparison
         assert ViewMode.STYLED != ViewMode.SOURCE
         assert ViewMode.STYLED == ViewMode.STYLED
+
+
+class TestXEditFormat:
+    """Test .xedit file format functionality."""
+
+    def test_save_to_xedit_format(self) -> None:
+        """Test saving content to .xedit XML format."""
+        dm = DocumentManager()
+        test_content = """<!-- SEGMENT: id="title", locked="true" -->
+<title>Test Document</title>
+<!-- SEGMENT: id="content", locked="false" -->
+<content>Some content here</content>"""
+
+        dm.content = test_content
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False) as tmp_file:
+            try:
+                dm.save_to_xedit_file(tmp_file.name)
+
+                # Verify file was created and has XML structure
+                with open(tmp_file.name, encoding="utf-8") as f:
+                    saved_content = f.read()
+
+                # Should be valid XML
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(saved_content)
+
+                # Check structure
+                assert root.tag == "xedit"
+                assert root.get("version") == "1.0"
+
+                # Should have metadata and document elements
+                assert root.find("metadata") is not None
+                document_elem = root.find("document")
+                assert document_elem is not None
+                assert document_elem.text == test_content
+
+            finally:
+                os.unlink(tmp_file.name)
+
+    def test_load_from_xedit_format(self) -> None:
+        """Test loading content from .xedit XML format."""
+        test_content = """<!-- SEGMENT: id="title", locked="true" -->
+<title>Test Document</title>"""
+
+        # Create a valid .xedit file with CDATA
+        xedit_xml = f"""<?xml version='1.0' encoding='unicode'?>
+<xedit version="1.0">
+  <metadata />
+  <document><![CDATA[{test_content}]]></document>
+</xedit>"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False, encoding="utf-8") as tmp_file:
+            tmp_file.write(xedit_xml)
+            tmp_file.flush()
+
+            try:
+                dm = DocumentManager()
+                dm.load_from_xedit_file(tmp_file.name)
+
+                # Content should be extracted correctly
+                assert dm.content == test_content
+                assert dm.file_path == tmp_file.name
+                assert not dm.is_modified
+
+                # Segments should be parsed
+                assert len(dm.segments) == 1
+                segment = dm.segments[0]
+                assert segment.metadata.id == "title"
+                assert segment.metadata.locked is True
+
+            finally:
+                os.unlink(tmp_file.name)
+
+    def test_xedit_round_trip(self) -> None:
+        """Test save and load round trip maintains content integrity."""
+        original_content = """<!-- SEGMENT: id="header", locked="true" -->
+<header>Document Header</header>
+<!-- SEGMENT: id="body", locked="false", double_width="true" -->
+<body>Document body with some content</body>
+<!-- SEGMENT: id="total", dynamic="calculate_sum:a,b" -->
+<total>{{computed_value}}</total>"""
+
+        dm = DocumentManager()
+        dm.content = original_content
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False) as tmp_file:
+            try:
+                # Save to .xedit
+                dm.save_to_xedit_file(tmp_file.name)
+
+                # Load from .xedit
+                dm2 = DocumentManager()
+                dm2.load_from_xedit_file(tmp_file.name)
+
+                # Content should be identical
+                assert dm2.content == original_content
+
+                # Segments should be parsed correctly
+                assert len(dm2.segments) == 3
+
+                # Check specific segments
+                segments_by_id = {seg.metadata.id: seg for seg in dm2.segments}
+
+                assert "header" in segments_by_id
+                assert segments_by_id["header"].metadata.locked is True
+
+                assert "body" in segments_by_id
+                assert segments_by_id["body"].metadata.locked is False
+                assert segments_by_id["body"].metadata.double_width is True
+
+                assert "total" in segments_by_id
+                assert segments_by_id["total"].metadata.is_dynamic is True
+                assert segments_by_id["total"].metadata.dynamic.function == "calculate_sum"
+                assert segments_by_id["total"].metadata.dynamic.deps == ["a", "b"]
+
+            finally:
+                os.unlink(tmp_file.name)
+
+    def test_auto_detect_xedit_format_save(self) -> None:
+        """Test auto-detection of .xedit format on save."""
+        dm = DocumentManager()
+        dm.content = "<test>content</test>"
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False) as tmp_file:
+            try:
+                # Use generic save_to_file, should auto-detect .xedit format
+                dm.save_to_file(tmp_file.name)
+
+                # Should create valid .xedit XML
+                with open(tmp_file.name, encoding="utf-8") as f:
+                    content = f.read()
+
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(content)
+                assert root.tag == "xedit"
+
+            finally:
+                os.unlink(tmp_file.name)
+
+    def test_auto_detect_xedit_format_load(self) -> None:
+        """Test auto-detection of .xedit format on load."""
+        test_content = "<test>content</test>"
+        xedit_xml = f"""<?xml version='1.0' encoding='unicode'?>
+<xedit version="1.0">
+  <metadata />
+  <document><![CDATA[{test_content}]]></document>
+</xedit>"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False, encoding="utf-8") as tmp_file:
+            tmp_file.write(xedit_xml)
+            tmp_file.flush()
+
+            try:
+                dm = DocumentManager()
+                # Use generic load_from_file, should auto-detect .xedit format
+                dm.load_from_file(tmp_file.name)
+
+                assert dm.content == test_content
+
+            finally:
+                os.unlink(tmp_file.name)
+
+    def test_load_invalid_xedit_file(self) -> None:
+        """Test loading invalid .xedit file raises appropriate error."""
+        # Test 1: Invalid XML
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False, encoding="utf-8") as tmp_file:
+            tmp_file.write("not valid xml")
+            tmp_file.flush()
+
+            try:
+                dm = DocumentManager()
+                with pytest.raises(FileLoadError, match="Failed to load .xedit file"):
+                    dm.load_from_xedit_file(tmp_file.name)
+            finally:
+                os.unlink(tmp_file.name)
+
+        # Test 2: Wrong root element
+        invalid_xml = """<?xml version='1.0' encoding='unicode'?>
+<wrong_root>
+  <document>content</document>
+</wrong_root>"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False, encoding="utf-8") as tmp_file:
+            tmp_file.write(invalid_xml)
+            tmp_file.flush()
+
+            try:
+                dm = DocumentManager()
+                with pytest.raises(FileLoadError, match="root element must be 'xedit'"):
+                    dm.load_from_xedit_file(tmp_file.name)
+            finally:
+                os.unlink(tmp_file.name)
+
+        # Test 3: Missing document element
+        invalid_xml = """<?xml version='1.0' encoding='unicode'?>
+<xedit version="1.0">
+  <metadata />
+</xedit>"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xedit", delete=False, encoding="utf-8") as tmp_file:
+            tmp_file.write(invalid_xml)
+            tmp_file.flush()
+
+            try:
+                dm = DocumentManager()
+                with pytest.raises(FileLoadError, match="missing 'document' element"):
+                    dm.load_from_xedit_file(tmp_file.name)
+            finally:
+                os.unlink(tmp_file.name)
