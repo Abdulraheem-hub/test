@@ -90,6 +90,7 @@ class EditorWidget(QPlainTextEdit):
         super().__init__(parent)
         self.setFont(QFont("Consolas", 11))
         self.setTabStopDistance(40)
+        self._grid_visible = False
 
         # Create line number area
         self.line_number_area = LineNumberArea(self)
@@ -226,9 +227,42 @@ class EditorWidget(QPlainTextEdit):
                 cursor.insertText(text)
             # If we're exactly at the end of an 80-character line, block further typing
 
+    def set_grid_visible(self, visible: bool) -> None:
+        """Set grid visibility."""
+        self._grid_visible = visible
+        self.update()  # Trigger repaint
+
     def set_content(self, content: str) -> None:
         """Set editor content."""
         self.setPlainText(content)
+
+    def paintEvent(self, event) -> None:
+        """Handle paint events - draw grid if visible."""
+        super().paintEvent(event)
+
+        if self._grid_visible:
+            self._draw_column_grid()
+
+    def _draw_column_grid(self) -> None:
+        """Draw vertical grid lines at column boundaries."""
+        painter = QPainter(self.viewport())
+        painter.setPen(QColor(200, 200, 200))  # Light gray color
+
+        # Calculate character width
+        char_width = self.fontMetrics().horizontalAdvance('0')
+
+        # Draw grid lines at 10, 20, 30, ..., 80 character positions
+        content_offset = self.contentOffset()
+        for col in range(10, 90, 10):  # Every 10 characters up to 80
+            x_pos = self.line_number_area_width() + (col * char_width) + content_offset.x()
+            if x_pos > self.line_number_area_width() and x_pos < self.viewport().width():
+                # Special line for 80 characters
+                if col == 80:
+                    painter.setPen(QColor(150, 150, 150))  # Darker gray for 80-char line
+                else:
+                    painter.setPen(QColor(200, 200, 200))  # Light gray for other lines
+
+                painter.drawLine(int(x_pos), 0, int(x_pos), self.viewport().height())
 
     def get_content(self) -> str:
         """Get editor content."""
@@ -266,6 +300,7 @@ class MainWindow(QMainWindow):
         # Initialize core editor
         self.editor_core = EditorCore()
         self.editor_core.register_mode_change_callback(self._on_mode_change)
+        self.editor_core.register_grid_change_callback(self._on_grid_change)
 
         # Set up UI
         self.setWindowTitle("PyQt6 Editor")
@@ -375,6 +410,17 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
+        # Toggle grid action
+        grid_action = QAction("Toggle Column &Grid", self)
+        grid_action.setShortcut(QKeySequence("Ctrl+G"))
+        grid_action.setStatusTip("Toggle column grid overlay")
+        grid_action.setCheckable(True)
+        grid_action.triggered.connect(self._toggle_grid)
+        view_menu.addAction(grid_action)
+        self.grid_action = grid_action
+
+        view_menu.addSeparator()
+
         # Format XML action
         format_action = QAction("&Format XML", self)
         format_action.setShortcut(QKeySequence("Ctrl+F"))
@@ -399,6 +445,11 @@ class MainWindow(QMainWindow):
         # Add view actions to toolbar
         main_toolbar.addAction(self.styled_action)
         main_toolbar.addAction(self.source_action)
+
+        main_toolbar.addSeparator()
+
+        # Add grid toggle to toolbar
+        main_toolbar.addAction(self.grid_action)
 
         main_toolbar.addSeparator()
 
@@ -460,6 +511,11 @@ class MainWindow(QMainWindow):
         """Handle mode change notification from core."""
         self._update_view_mode()
         self._update_menu_checkboxes()
+
+    def _on_grid_change(self, visible: bool) -> None:
+        """Handle grid visibility change notification from core."""
+        self.styled_editor.set_grid_visible(visible)
+        self.grid_action.setChecked(visible)
 
     def _update_view_mode(self) -> None:
         """Update UI based on current view mode."""
@@ -549,6 +605,10 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("XML formatted", 2000)
         except Exception as e:
             QMessageBox.warning(self, "Format Error", f"Failed to format XML:\n{e}")
+
+    def _toggle_grid(self) -> None:
+        """Toggle column grid visibility."""
+        self.editor_core.toggle_grid()
 
     def _check_save_changes(self) -> bool:
         """Check if user wants to save changes before proceeding."""

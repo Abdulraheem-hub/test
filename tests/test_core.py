@@ -343,6 +343,70 @@ class TestEditorCore:
         assert can_switch
         assert error is None
 
+    def test_grid_visibility_initial_state(self) -> None:
+        """Test initial grid visibility state."""
+        core = EditorCore()
+        assert core.grid_visible is False
+
+    def test_toggle_grid(self) -> None:
+        """Test grid toggle functionality."""
+        core = EditorCore()
+
+        # Initially should be False
+        assert core.grid_visible is False
+
+        # Toggle to True
+        core.toggle_grid()
+        assert core.grid_visible is True
+
+        # Toggle back to False
+        core.toggle_grid()
+        assert core.grid_visible is False
+
+    def test_grid_change_callbacks(self) -> None:
+        """Test grid change callback functionality."""
+        core = EditorCore()
+        callback1 = Mock()
+        callback2 = Mock()
+
+        core.register_grid_change_callback(callback1)
+        core.register_grid_change_callback(callback2)
+
+        # Toggle grid - should trigger callbacks
+        core.toggle_grid()
+
+        callback1.assert_called_once_with(True)
+        callback2.assert_called_once_with(True)
+
+        # Reset mocks
+        callback1.reset_mock()
+        callback2.reset_mock()
+
+        # Toggle again - should trigger callbacks again
+        core.toggle_grid()
+
+        callback1.assert_called_once_with(False)
+        callback2.assert_called_once_with(False)
+
+    def test_grid_change_callback_error_handling(self) -> None:
+        """Test grid change callback error handling."""
+        core = EditorCore()
+
+        # Callback that raises exception
+        def error_callback(visible):
+            raise Exception("Callback error")
+
+        # Normal callback
+        normal_callback = Mock()
+
+        core.register_grid_change_callback(error_callback)
+        core.register_grid_change_callback(normal_callback)
+
+        # Grid toggle should succeed despite error in first callback
+        core.toggle_grid()
+        assert core.grid_visible is True
+        normal_callback.assert_called_once_with(True)
+
 
 class TestViewMode:
     """Test ViewMode enum."""

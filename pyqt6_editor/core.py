@@ -135,11 +135,18 @@ class EditorCore:
         self.document_manager = DocumentManager()
         self._current_mode = ViewMode.STYLED
         self._view_mode_callbacks: list[callable] = []
+        self._grid_visible = False
+        self._grid_callbacks: list[callable] = []
 
     @property
     def current_mode(self) -> ViewMode:
         """Get current view mode."""
         return self._current_mode
+
+    @property
+    def grid_visible(self) -> bool:
+        """Get grid visibility state."""
+        return self._grid_visible
 
     def set_mode(self, mode: ViewMode) -> None:
         """Set view mode and notify callbacks."""
@@ -151,11 +158,29 @@ class EditorCore:
         """Register callback for mode changes."""
         self._view_mode_callbacks.append(callback)
 
+    def register_grid_change_callback(self, callback: callable) -> None:
+        """Register callback for grid visibility changes."""
+        self._grid_callbacks.append(callback)
+
+    def toggle_grid(self) -> None:
+        """Toggle grid visibility."""
+        self._grid_visible = not self._grid_visible
+        self._notify_grid_change()
+
     def _notify_mode_change(self) -> None:
         """Notify all registered callbacks of mode change."""
         for callback in self._view_mode_callbacks:
             try:
                 callback(self._current_mode)
+            except Exception:
+                # Silently ignore callback errors to prevent cascading failures
+                pass
+
+    def _notify_grid_change(self) -> None:
+        """Notify all registered callbacks of grid visibility change."""
+        for callback in self._grid_callbacks:
+            try:
+                callback(self._grid_visible)
             except Exception:
                 # Silently ignore callback errors to prevent cascading failures
                 pass
