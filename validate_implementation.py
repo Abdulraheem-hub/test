@@ -9,49 +9,49 @@ def validate_segment_implementation() -> None:
     """Validate that the segment metadata system meets all requirements."""
     print("🎯 Segment Metadata System Validation")
     print("=" * 60)
-    
+
     # Sample XML with all segment types
     xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
 <document>
     <!-- SEGMENT: id="locked_header", locked="true" -->
     <header>Protected Content - Cannot Edit</header>
-    
+
     <!-- SEGMENT: id="dynamic_calc", dynamic="sum_values:a,b,c" -->
     <result>{{computed_sum}}</result>
-    
+
     <!-- SEGMENT: id="editable_text", locked="false" -->
     <content>This text can be freely edited</content>
-    
+
     <!-- SEGMENT: id="wide_section", double_width="true" -->
     <display>Double-width formatted content</display>
 </document>'''
-    
+
     core = EditorCore()
     core.document_manager.content = xml_content
-    
+
     # Register dynamic function
     def sum_values():
         return "157"
     core.document_manager.register_dynamic_function("sum_values", sum_values)
-    
+
     print("✅ XML parsing and segment creation")
     segments = core.document_manager.segments
     assert len(segments) == 4, f"Expected 4 segments, got {len(segments)}"
-    
+
     print("✅ Locked segment identification")
     locked_segments = [s for s in segments if s.metadata.is_locked]
-    assert len(locked_segments) == 2, f"Expected 2 locked segments"  # 1 explicit + 1 dynamic
-    
+    assert len(locked_segments) == 2, "Expected 2 locked segments"  # 1 explicit + 1 dynamic
+
     print("✅ Dynamic segment evaluation")
     dynamic_segments = [s for s in segments if s.metadata.is_dynamic]
-    assert len(dynamic_segments) == 1, f"Expected 1 dynamic segment"
+    assert len(dynamic_segments) == 1, "Expected 1 dynamic segment"
     dynamic_result = core.document_manager.evaluate_dynamic_segment(dynamic_segments[0])
     assert "[DYNAMIC:" in dynamic_result, "Dynamic evaluation failed"
-    
+
     print("✅ Double-width segment detection")
     wide_segments = [s for s in segments if s.metadata.double_width]
-    assert len(wide_segments) == 1, f"Expected 1 double-width segment"
-    
+    assert len(wide_segments) == 1, "Expected 1 double-width segment"
+
     print("✅ Position-based edit protection")
     # Test positions in locked vs unlocked segments
     test_results = []
@@ -60,27 +60,27 @@ def validate_segment_implementation() -> None:
         can_edit = core.can_edit_at_position(mid_pos)
         expected_editable = not segment.metadata.is_locked
         test_results.append(can_edit == expected_editable)
-    
+
     assert all(test_results), "Position-based editing validation failed"
-    
+
     print("✅ Styled view processing")
     core.set_mode(ViewMode.STYLED)
     styled_content = core.get_display_content()
     assert len(styled_content) > 0, "Styled content generation failed"
     assert "[DYNAMIC:" in styled_content, "Dynamic content not processed"
-    
+
     print("✅ Segment information for GUI")
     segments_info = core.get_segments_info()
     assert len(segments_info) == 4, "Segment info generation failed"
-    
+
     # Verify each segment has required properties
     required_keys = ['id', 'start_pos', 'end_pos', 'is_locked', 'is_dynamic', 'double_width', 'content']
     for info in segments_info:
         for key in required_keys:
             assert key in info, f"Missing key '{key}' in segment info"
-    
+
     print("\n🎉 All segment validation tests passed!")
-    
+
     return True
 
 
@@ -91,7 +91,7 @@ def validate_implementation() -> None:
     print("=" * 60)
 
     # Validate segment functionality first
-    segment_validation_passed = validate_segment_implementation()
+    validate_segment_implementation()
 
     print("\n" + "="*60)
     print("🎯 EditorWidget Implementation Validation")
