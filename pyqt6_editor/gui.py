@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import (
     QAction,
+    QColor,
     QFont,
     QKeySequence,
+    QPainter,
     QSyntaxHighlighter,
     QTextCharFormat,
+    QTextCursor,
     QTextDocument,
 )
 from PyQt6.QtWidgets import (
@@ -59,14 +62,177 @@ class XMLSyntaxHighlighter(QSyntaxHighlighter):
             self.setFormat(match.start(), match.end() - match.start(), self.xml_comment_format)
 
 
+class LineNumberArea(QWidget):
+    """Line number area widget for the editor."""
+
+    def __init__(self, editor: EditorWidget) -> None:
+        """Initialize line number area."""
+        super().__init__(editor)
+        self.editor = editor
+
+    def sizeHint(self) -> QSize:
+        """Return the size hint for the line number area."""
+        return QSize(self.editor.line_number_area_width(), 0)
+
+    def paintEvent(self, event) -> None:
+        """Paint the line numbers."""
+        self.editor.line_number_area_paint_event(event)
+
+
 class EditorWidget(QPlainTextEdit):
-    """Custom editor widget for styled view."""
+    """Custom editor widget for styled view with line numbers and overwrite mode."""
+
+    MAX_LINE_LENGTH = 80
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize editor widget."""
         super().__init__(parent)
         self.setFont(QFont("Consolas", 11))
         self.setTabStopDistance(40)
+
+        # Create line number area
+        self.line_number_area = LineNumberArea(self)
+
+        # Connect signals for line number updates
+        self.blockCountChanged.connect(self.update_line_number_area_width)
+        self.updateRequest.connect(self.update_line_number_area)
+        self.cursorPositionChanged.connect(self.highlight_current_line)
+
+        # Initialize line number area
+        self.update_line_number_area_width(0)
+        self.highlight_current_line()
+
+    def line_number_area_width(self) -> int:
+        """Calculate the width needed for line numbers."""
+        digits = 1
+        max_num = max(1, self.blockCount())
+        while max_num >= 10:
+            max_num //= 10
+            digits += 1
+
+        space = 3 + self.fontMetrics().horizontalAdvance('9') * digits
+        return space
+
+    def update_line_number_area_width(self, _) -> None:
+        """Update the width of the line number area."""
+        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+
+    def update_line_number_area(self, rect, dy) -> None:
+        """Update the line number area when scrolling."""
+        if dy:
+            self.line_number_area.scroll(0, dy)
+        else:
+            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
+
+        if rect.contains(self.viewport().rect()):
+            self.update_line_number_area_width(0)
+
+    def resizeEvent(self, event) -> None:
+        """Handle resize events to update line number area."""
+        super().resizeEvent(event)
+        cr = self.contentsRect()
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
+
+    def line_number_area_paint_event(self, event) -> None:
+        """Paint the line numbers."""
+        painter = QPainter(self.line_number_area)
+        painter.fillRect(event.rect(), QColor(240, 240, 240))
+
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
+        bottom = top + self.blockBoundingRect(block).height()
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                number = str(block_number + 1)
+                painter.setPen(QColor(120, 120, 120))
+                painter.drawText(0, int(top), self.line_number_area.width(), self.fontMetrics().height(),
+                               Qt.AlignmentFlag.AlignRight, number)
+
+            block = block.next()
+            top = bottom
+            bottom = top + self.blockBoundingRect(block).height()
+            block_number += 1
+
+    def highlight_current_line(self) -> None:
+        """Highlight the current line."""
+        extra_selections = []
+
+        if not self.isReadOnly():
+            selection = QPlainTextEdit.ExtraSelection()
+            line_color = QColor(Qt.GlobalColor.yellow).lighter(160)
+            selection.format.setBackground(line_color)
+            selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)
+            selection.cursor = self.textCursor()
+            selection.cursor.clearSelection()
+            extra_selections.append(selection)
+
+        self.setExtraSelections(extra_selections)
+
+    def keyPressEvent(self, event) -> None:
+        """Handle key press events for overwrite mode and line length constraints."""
+        key = event.key()
+        text = event.text()
+        cursor = self.textCursor()
+
+        # Allow navigation keys to work normally
+        navigation_keys = {
+            Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down,
+            Qt.Key.Key_Home, Qt.Key.Key_End, Qt.Key.Key_PageUp, Qt.Key.Key_PageDown,
+            Qt.Key.Key_Tab, Qt.Key.Key_Backtab
+        }
+
+        if key in navigation_keys:
+            super().keyPressEvent(event)
+            return
+
+        # Allow Enter/Return to insert new lines normally
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            super().keyPressEvent(event)
+            return
+
+        # Handle Backspace and Delete
+        if key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            # For now, allow normal backspace/delete behavior
+            # TODO: Add locked segment protection when needed
+            super().keyPressEvent(event)
+            return
+
+        # Handle text input (overwrite mode with constraints)
+        if text and text.isprintable():
+            self._handle_text_input(text, cursor)
+            return
+
+        # For all other keys, use default behavior
+        super().keyPressEvent(event)
+
+    def _handle_text_input(self, text: str, cursor: QTextCursor) -> None:
+        """Handle text input in overwrite mode with line length constraints."""
+        # Get current line information
+        current_block = cursor.block()
+        line_text = current_block.text()
+        cursor_position_in_line = cursor.positionInBlock()
+
+        # Check if we're at the end of the line beyond existing text
+        if cursor_position_in_line >= len(line_text):
+            # Block typing beyond existing text at end of line
+            return
+
+        # Check line length constraint
+        if len(line_text) >= self.MAX_LINE_LENGTH and cursor_position_in_line >= self.MAX_LINE_LENGTH:
+            # Block typing beyond 80 characters
+            return
+
+        # Implement overwrite mode
+        if cursor_position_in_line < len(line_text):
+            # We're in the middle of the line - overwrite the character
+            cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor)
+            cursor.insertText(text)
+        else:
+            # We're at the end of existing text but within line length limit
+            if len(line_text) < self.MAX_LINE_LENGTH:
+                cursor.insertText(text)
 
     def set_content(self, content: str) -> None:
         """Set editor content."""
