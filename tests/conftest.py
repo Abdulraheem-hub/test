@@ -1,6 +1,5 @@
 """Test configuration for pytest."""
 
-import pytest
 import os
 
 # Ensure the PyQt6 application doesn't require a display for testing

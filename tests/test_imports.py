@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch
-
 
 def test_core_module_import():
     """Test that core module can be imported."""
     from pyqt6_editor.core import DocumentManager, EditorCore, ViewMode
-    
+
     # Verify classes can be instantiated
     dm = DocumentManager()
     core = EditorCore()
-    
+
     assert dm is not None
     assert core is not None
     assert ViewMode.STYLED.value == "styled"
@@ -43,7 +40,7 @@ def test_main_module_import_mock():
 def test_package_initialization():
     """Test package can be imported."""
     import pyqt6_editor
-    
+
     assert pyqt6_editor.__version__ == "0.1.0"
     assert hasattr(pyqt6_editor, 'DocumentManager')
     assert hasattr(pyqt6_editor, 'EditorCore')

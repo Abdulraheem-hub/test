@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 
 class ViewMode(Enum):
@@ -20,7 +20,7 @@ class DocumentManager:
     def __init__(self) -> None:
         """Initialize document manager."""
         self._content: str = ""
-        self._file_path: Optional[str] = None
+        self._file_path: str | None = None
         self._modified: bool = False
 
     @property
@@ -36,7 +36,7 @@ class DocumentManager:
             self._modified = True
 
     @property
-    def file_path(self) -> Optional[str]:
+    def file_path(self) -> str | None:
         """Get current file path."""
         return self._file_path
 
@@ -56,14 +56,14 @@ class DocumentManager:
     def load_from_file(self, file_path: str) -> None:
         """Load content from file."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 self._content = f.read()
             self._file_path = file_path
             self._modified = False
         except (OSError, UnicodeDecodeError) as e:
             raise FileLoadError(f"Failed to load file {file_path}: {e}") from e
 
-    def save_to_file(self, file_path: Optional[str] = None) -> None:
+    def save_to_file(self, file_path: str | None = None) -> None:
         """Save content to file."""
         target_path = file_path or self._file_path
         if not target_path:
@@ -90,7 +90,7 @@ class DocumentManager:
         except ET.ParseError as e:
             raise XMLFormatError(f"Invalid XML content: {e}") from e
 
-    def validate_xml(self) -> tuple[bool, Optional[str]]:
+    def validate_xml(self) -> tuple[bool, str | None]:
         """Validate XML content."""
         if not self._content.strip():
             return True, None
@@ -175,7 +175,7 @@ class EditorCore:
             # GUI components will handle the styling
             return self.document_manager.content
 
-    def can_switch_to_styled(self) -> tuple[bool, Optional[str]]:
+    def can_switch_to_styled(self) -> tuple[bool, str | None]:
         """Check if we can switch to styled view."""
         is_valid, error = self.document_manager.validate_xml()
         if not is_valid:
