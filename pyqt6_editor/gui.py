@@ -323,9 +323,9 @@ class EditorWidget(QPlainTextEdit):
         # Calculate character width
         char_width = self.fontMetrics().horizontalAdvance('0')
 
-        # Draw grid lines at 10, 20, 30, ..., 80 character positions
+        # Draw grid lines at 5, 10, 15, ..., 80 character positions
         content_offset = self.contentOffset()
-        for col in range(10, 90, 10):  # Every 10 characters up to 80
+        for col in range(5, 85, 5):  # Every 5 characters up to 80
             x_pos = self.line_number_area_width() + (col * char_width) + content_offset.x()
             if x_pos > self.line_number_area_width() and x_pos < self.viewport().width():
                 # Special line for 80 characters

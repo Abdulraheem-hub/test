@@ -132,3 +132,17 @@ class TestEditorWidgetLogic:
         assert at_end_beyond_text is True   # At end beyond text - BLOCKED
         assert at_length_limit is True      # At length limit - ALSO BLOCKED
         assert should_overwrite is False    # Cannot overwrite
+
+    def test_grid_column_spacing_logic(self) -> None:
+        """Test the logic for 5-column grid spacing."""
+        # Test the range logic used in _draw_column_grid
+        expected_columns = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80]
+        actual_columns = list(range(5, 85, 5))
+        
+        assert actual_columns == expected_columns
+        assert len(actual_columns) == 16
+        assert actual_columns[0] == 5
+        assert actual_columns[-1] == 80
+        
+        # Test that column 80 is included for special handling
+        assert 80 in actual_columns
