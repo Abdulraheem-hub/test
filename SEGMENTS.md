@@ -28,8 +28,23 @@ Each segment can have the following attributes:
 
 - **Function Registration**: Register dynamic functions with the document manager
 - **Dependency Tracking**: Functions can specify dependencies on other segments
-- **Computed Display**: Dynamic segments show `[DYNAMIC: function_name]` format
+- **Built-in Functions**: Pre-registered formula functions for common calculations
 - **Real-time Updates**: Content updates when dependencies change
+- **Error Handling**: Graceful error reporting for invalid functions or data
+
+#### Built-in Formula Functions
+
+**`difference(id1, id2)`**: Calculates numeric difference between two segments
+```xml
+<!-- SEGMENT: id="result", dynamic="difference:price,discount" -->
+<total>{{calculated_difference}}</total>
+```
+
+**`digits_to_words(id)`**: Converts each digit of a number to its word representation
+```xml
+<!-- SEGMENT: id="year_words", dynamic="digits_to_words:year" -->
+<year_text>{{digit_words}}</year_text>
+```
 
 ### ✅ XML Integration
 
@@ -52,8 +67,26 @@ Segments are defined using XML comments in the document:
 ### Dynamic Segment with Dependencies
 
 ```xml
-<!-- SEGMENT: id="total", dynamic="calculate_sum:price,quantity" -->
-<total>{{calculated_value}}</total>
+<!-- SEGMENT: id="total", dynamic="difference:price,quantity" -->
+<total>{{calculated_difference}}</total>
+```
+
+### Formula Function Examples
+
+```xml
+<!-- Calculate difference between two numbers -->
+<!-- SEGMENT: id="price" -->
+<price>100</price>
+<!-- SEGMENT: id="discount" -->
+<discount>15</discount>
+<!-- SEGMENT: id="final_price", dynamic="difference:price,discount" -->
+<final_price>{{computed}}</final_price>
+
+<!-- Convert digits to words -->
+<!-- SEGMENT: id="year" -->
+<year>2024</year>
+<!-- SEGMENT: id="year_words", dynamic="digits_to_words:year" -->
+<year_words>{{computed}}</year_words>
 ```
 
 ### Double-width Segment
@@ -147,7 +180,8 @@ class TextSegment:
 ## Future Enhancements
 
 - **Enhanced Double-width Rendering**: Visual formatting for double-width segments
-- **Advanced Dynamic Functions**: Support for complex expressions and calculations
+- **Additional Formula Functions**: Support for more mathematical operations (sum, multiply, etc.)
+- **Complex Expressions**: Support for formula expressions with multiple operations
 - **Segment Validation**: Schema validation for segment definitions
 - **Export/Import**: Serialize segment metadata to external formats
 
